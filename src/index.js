@@ -1,32 +1,28 @@
 import Chess from 'chess.js'
 
 const chess = new Chess();
-
-const files2 = {
-  alpha: 'a',
-  beta: 'b',
-  charlie: 'c',
-  delta: 'd',
-  echo: 'e',
-  fox: 'f',
-  Fox: 'f',
-  golf: 'g',
-  hotel: 'h'
-};
+const board = Chessboard('chessboard', 'start');
 
 const files = {
-  f: ['fox', 'Fox']
+  a: ['Alpha', 'alpha'],
+  b: ['Beta', 'beta', 'Bravo', 'bravo'],
+  c: ['Charlie', 'charlie'],
+  d: ['Delta', 'delta'],
+  e: ['Echo', 'echo'],
+  g: ['Golf', 'golf'],
+  f: ['Fox', 'fox'],
+  h: ['Hotel', 'hotel'],
 }
 
 const ranks = {
-  '1': ['One','one'],
-  '2': ['Two', 'two'],
-  '3': ['Three', 'three'],
-  '4': ['Four', 'four'],
-  '5': ['Five', 'five', 'V', 'v'],
-  '6': ['Six', 'six'],
-  '7': ['Seven', 'seven'],
-  '8': ['Eight', 'eight']
+  '1': ['1', 'One','one'],
+  '2': ['2', 'Two', 'two', 'to'],
+  '3': ['3', 'Three', 'three'],
+  '4': ['4','Four', 'four', 'full', 'before'],
+  '5': ['5', 'Five', 'five', 'V', 'v'],
+  '6': ['6', 'Six', 'six'],
+  '7': ['7', 'Seven', 'seven'],
+  '8': ['8', 'Eight', 'eight']
 }
 
 const pieceTypes = {
@@ -55,19 +51,18 @@ const synth = window.speechSynthesis;
 function playText(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.voice = synth.getVoices()[3];
-  utterance.rate = 0.8;
   speechSynthesis.speak(utterance);
 }
 
 function aiPlay(){
-  let moves = chess.moves();
-  const move = moves[Math.floor(Math.random() * moves.length)];
+  const moves = chess.moves();
+  const randomMove = moves[Math.floor(Math.random() * moves.length)];
   playText("I played");
-  for (var i = 0; i < move.length; i++) {
-    playText(move.charAt(i));
+  for (var i = 0; i < randomMove.length; i++) {
+    playText(randomMove.charAt(i)); //to do: change to e4-e5 notation type
   }
-  chess.move(move);
-  console.log(move);
+  const move = chess.move(randomMove);
+  board.move(move.from + '-' + move.to)
 }
 
 window.addEventListener('keypress', function(e) {
@@ -76,43 +71,39 @@ window.addEventListener('keypress', function(e) {
   }
 })
 
-let speech = "";
+let speech = '';
 
 recognition.onresult = function(event) {
   speech = event.results[0][0].transcript;
-  console.log(speech);
+  console.log('speech: ' + speech);
 }
 
-
-//onspeechend ?
 recognition.onend = function() {
   recognition.stop();
-  handleSpeech(speech);// 3 durum: look,move,yanlış
-  console.log(chess.ascii());
+  handleSpeech(speech);
 }
 
 function handleSpeech(speech){
-  let words = speech.split(' ');
-  if(words[0] == 'look'){
-    look(words);//if koy false ise invalid square desin
-  }
-  else{
-    if(playerMove(words)){
+  try {
+    let words = parseSpeech(speech);
+    if(words[0] == 'look'){
+      look(words);
+    }
+    else{
+      playerMove(words);
       aiPlay();
     }
+  } catch (error) {
+    console.error(error);
+    playText(error.message);
   }
 }
 
 function look(words){
-  // boolean döndürsün try catch dene
-  console.log("Words: " + words);
-  console.log("words1: " + words[1] + "words2: " + words[2]);
+  //to do: try catch
   let square = wordToFile(words[1]) + wordToRank(words[2]);
-  console.log("Square: " + square);
   let squareInfo = chess.get(square);
-  console.log("Square Info: " + squareInfo);
   let color = colors[squareInfo['color']];
-  console.log("Color: " + color);
   let type = pieceTypes[squareInfo['type']];
   playText('There is a ' + color + " " + type + " at there");
   //chess.get('a5')
@@ -120,21 +111,30 @@ function look(words){
 }
 
 
-function playerMove(){
-  //speech to move
-  if(speech == "Alpha 4"){
-    chess.move('a4');
-    return true;
+function playerMove(words){
+  const move = wordsToMove(words);
+  //to do: split functions
+  const validMoves = chess.moves({square: move.from});
+  if(!validMoves.includes(move.to)){
+    throw new InvalidMove('Invalid move');
   }
-  else if(speech == "beta 4"){
-    chess.move('b4');
-    return true;
-  }
-  return false;
+  chess.move({from: move.from, to: move.to});
+  board.move(move.from + '-' + move.to);
 }
 
-function speechToMove(){
-  
+function wordsToMove(words){
+  if(words.length != 4){
+    throw new InvalidSize('Speech must include 4 words');
+  }
+  const from = wordToFile(words[0]) + wordToRank(words[1]);
+  const to = wordToFile(words[2]) + wordToRank(words[3]);
+  const move = {from, to};
+  return move;
+}
+
+function parseSpeech(speech){
+  const words = speech.split(' ');
+  return words;
 }
 
 //util functions
@@ -144,14 +144,23 @@ function findInObject(object, searchingValue){
         return key;
     }
   }
+  throw new InvalidParameter('Value not found in object');
 }
 
 function wordToFile(word){
-  return findInObject(word, files);
+  try {
+    return findInObject(files, word);
+  } catch (error) {
+    throw new InvalidParameter('File not found');
+  }
 }
 
 function wordToRank(word){
-  return parseInt(word) ? word : findInObject(word, ranks);
+  try {
+    return findInObject(ranks, word);
+  } catch (error) {
+    throw new InvalidParameter('Rank not found');
+  }
 }
 
 function getKeyByValue(object, value) {
@@ -162,5 +171,17 @@ function pieceTypeToChar(pieceType){
   return getKeyByValue(pieceTypes, pieceType);
 }
 
+function InvalidParameter(message) {
+  this.message = message;
+  this.name = 'InvalidParameter';
+}
 
+function InvalidSize(message) {
+  this.message = message;
+  this.name = 'InvalidSize';
+}
 
+function InvalidMove(message) {
+  this.message = message;
+  this.name = 'InvalidMove';
+}
